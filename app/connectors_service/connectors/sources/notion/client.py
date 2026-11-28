@@ -30,6 +30,19 @@ class NotFound(Exception):
     pass
 
 
+def _retry_after_seconds(retry_after):
+    """Seconds to wait from a Retry-After header value.
+
+    Header values are strings, so they need to be converted before they are
+    passed to sleep. Fall back to DEFAULT_RETRY_SECONDS when the header is
+    missing or is not a number of seconds.
+    """
+    try:
+        return int(retry_after)
+    except (TypeError, ValueError):
+        return DEFAULT_RETRY_SECONDS
+
+
 class NotionClient:
     """Notion API client"""
 
@@ -76,7 +89,7 @@ class NotionClient:
                 yield response
         except ClientResponseError as e:
             if e.status == 429:
-                retry_seconds = e.headers.get("Retry-After") or DEFAULT_RETRY_SECONDS
+                retry_seconds = _retry_after_seconds(e.headers.get("Retry-After"))
                 self._logger.debug(
                     f"Rate Limit reached: retry in {retry_seconds} seconds"
                 )
@@ -100,14 +113,12 @@ class NotionClient:
             return await function(start_cursor=next_cursor, **kwargs)
         except APIResponseError as exception:
             if exception.code == "rate_limited" or exception.status == 429:
-                retry_after = (
-                    exception.headers.get("retry-after") or DEFAULT_RETRY_SECONDS
-                )
+                retry_after = _retry_after_seconds(exception.headers.get("retry-after"))
                 request_info = f"Request: {function.__name__} (next_cursor: {next_cursor}, kwargs: {kwargs})"
                 self._logger.info(
-                    f"Connector will attempt to retry after {int(retry_after)} seconds. {request_info}"
+                    f"Connector will attempt to retry after {retry_after} seconds. {request_info}"
                 )
-                await self._sleeps.sleep(int(retry_after))
+                await self._sleeps.sleep(retry_after)
                 msg = "Rate limit exceeded."
                 raise Exception(msg) from exception
             else:

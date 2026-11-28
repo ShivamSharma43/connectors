@@ -17,7 +17,7 @@ from connectors.sources.notion import (
     NotionClient,
     NotionDataSource,
 )
-from connectors.sources.notion.client import NotFound
+from connectors.sources.notion.client import DEFAULT_RETRY_SECONDS, NotFound
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -625,6 +625,49 @@ async def test_get_via_session_with_429_status():
         assert response == retried_response
 
 
+@pytest.mark.parametrize(
+    "headers, expected_sleep",
+    [
+        ({"Retry-After": "2"}, 2),
+        ({}, DEFAULT_RETRY_SECONDS),
+        ({"Retry-After": "invalid"}, DEFAULT_RETRY_SECONDS),
+    ],
+)
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_get_via_session_with_429_status_waits_for_retry_after(
+    headers, expected_sleep
+):
+    retried_response = AsyncMock()
+
+    async with create_source(
+        NotionDataSource,
+        notion_secret_key="test_get_via_session_client_response_error_key",
+    ) as source:
+        with (
+            patch("aiohttp.ClientSession.get") as mock_get,
+            patch.object(
+                source.notion_client._sleeps, "sleep", AsyncMock()
+            ) as mock_sleep,
+        ):
+            mock_get.return_value.__aenter__.side_effect = [
+                aiohttp.ClientResponseError(
+                    request_info=Mock(),
+                    history=Mock(),
+                    status=429,
+                    message="rate-limited",
+                    headers=headers,
+                ),
+                retried_response,
+            ]
+            response = await anext(
+                source.notion_client.get_via_session("some_file_url")
+            )
+
+        assert response == retried_response
+        mock_sleep.assert_awaited_once_with(expected_sleep)
+
+
 @pytest.mark.asyncio
 async def test_fetch_children_recursively():
     async with create_source(
@@ -913,6 +956,43 @@ async def test_fetch_results_rate_limit_exceeded():
 
             # assert it did not go for 3rd retry
             assert mock_function_with_429.call_count == 3  # initial call + 2 retries
+
+
+@pytest.mark.parametrize(
+    "headers, expected_sleep",
+    [
+        ({"Retry-After": "2"}, 2),
+        ({}, DEFAULT_RETRY_SECONDS),
+        ({"Retry-After": "invalid"}, DEFAULT_RETRY_SECONDS),
+    ],
+)
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_fetch_results_rate_limit_waits_for_retry_after(headers, expected_sleep):
+    mock_function = AsyncMock(
+        side_effect=[
+            APIResponseError(
+                code="rate_limited",
+                message="Rate limit exceeded.",
+                response=Response(
+                    status_code=429, text="Rate limit exceeded.", headers=headers
+                ),
+            ),
+            {"success": True},
+        ]
+    )
+    mock_function.__name__ = "mock_function"
+
+    async with create_source(
+        NotionDataSource, notion_secret_key="secret_key"
+    ) as source:
+        with patch.object(
+            source.notion_client._sleeps, "sleep", AsyncMock()
+        ) as mock_sleep:
+            result = await source.notion_client.fetch_results(mock_function)
+
+        assert result == {"success": True}
+        mock_sleep.assert_awaited_once_with(expected_sleep)
 
 
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
