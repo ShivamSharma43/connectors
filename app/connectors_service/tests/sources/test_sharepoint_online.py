@@ -1737,6 +1737,35 @@ class TestSharepointOnlineClient:
         assert "GetByTitle('L''a%23b')" in patch_scroll.call_args.args[0]
 
     @pytest.mark.asyncio
+    async def test_site_list_methods_escape_title(
+        self, client, patch_fetch, patch_scroll
+    ):
+        site_url = f"https://{self.tenant_name}.sharepoint.com"
+        list_title = "Bob's #1 List"
+        escaped_title = "GetByTitle('Bob''s %231 List')"
+
+        patch_fetch.return_value = {"value": False, "AttachmentFiles": []}
+        patch_scroll.side_effect = NotFound()
+
+        await client.site_list_has_unique_role_assignments(site_url, list_title)
+        assert escaped_title in patch_fetch.call_args.args[0]
+
+        await client.site_list_item_has_unique_role_assignments(site_url, list_title, 5)
+        assert escaped_title in patch_fetch.call_args.args[0]
+
+        async for _ in client.site_list_item_attachments(site_url, list_title, 5):
+            pass
+        assert escaped_title in patch_fetch.call_args.args[0]
+
+        async for _ in client.site_list_role_assignments(site_url, list_title):
+            pass
+        assert escaped_title in patch_scroll.call_args.args[0]
+
+        async for _ in client.site_list_item_role_assignments(site_url, list_title, 5):
+            pass
+        assert escaped_title in patch_scroll.call_args.args[0]
+
+    @pytest.mark.asyncio
     async def test_site_pages_list_title(self, client, patch_fetch):
         site_url = f"https://{self.tenant_name}.sharepoint.com/sites/site"
         patch_fetch.return_value = {"Title": "Pages du site"}

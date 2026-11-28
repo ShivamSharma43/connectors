@@ -539,7 +539,7 @@ class SharepointOnlineClient:
     async def site_list_has_unique_role_assignments(self, site_web_url, site_list_name):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/HasUniqueRoleAssignments"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/HasUniqueRoleAssignments"
 
         try:
             response = await self._rest_api_client.fetch(url)
@@ -552,7 +552,7 @@ class SharepointOnlineClient:
 
         expand = "Member/users,RoleDefinitionBindings"
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/roleassignments?$expand={expand}"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -566,7 +566,7 @@ class SharepointOnlineClient:
     ):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/HasUniqueRoleAssignments"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/items({list_item_id})/HasUniqueRoleAssignments"
 
         try:
             response = await self._rest_api_client.fetch(url)
@@ -586,7 +586,7 @@ class SharepointOnlineClient:
 
         expand = "Member/users,RoleDefinitionBindings"
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/roleassignments?$expand={expand}"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/items({list_item_id})/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -657,7 +657,7 @@ class SharepointOnlineClient:
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(list_title)}')/items({list_item_id})?$expand=AttachmentFiles"
 
         try:
             list_item = await self._rest_api_client.fetch(url)
