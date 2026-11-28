@@ -890,7 +890,7 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
             ],
             "id": mock.ANY,
             "method": "GET",
-            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=0",
+            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5EORDERBYsys_id%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=0",
         },
         {
             "headers": [
@@ -899,7 +899,7 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
             ],
             "id": mock.ANY,
             "method": "GET",
-            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=2",
+            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5EORDERBYsys_id%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=2",
         },
     ]
 
@@ -1616,3 +1616,29 @@ async def test_fetch_attachment_metadata_reads_every_page_of_attachments():
         for table_sys_id, count in attachment_counts.items()
         for index in range(count)
     }
+
+
+@pytest.mark.asyncio
+async def test_paged_apis_order_ties_by_sys_id():
+    # Pages are requested by offset, so records created in the same second must
+    # be ordered by a unique field as well; otherwise a record can move across a
+    # page boundary between two requests and be skipped or returned twice.
+    async with create_service_now_source() as source:
+        client = source.servicenow_client
+        record_apis = client.get_record_apis(
+            url=ENDPOINTS["TABLE"].format(table="incident"),
+            params={"sysparm_query": "active=true"},
+            total_count=120,
+        )
+        attachment_apis = client.get_attachment_apis(
+            url=ENDPOINTS["ATTACHMENT"], ids=["id_1"], offset=50
+        )
+
+    queries = [
+        parse_qs(urlparse(api["url"]).query)["sysparm_query"][0]
+        for api in record_apis + attachment_apis
+    ]
+
+    assert len(queries) == 4
+    assert queries[:3] == ["ORDERBYsys_created_on^ORDERBYsys_id^active=true"] * 3
+    assert queries[3] == "ORDERBYsys_created_on^ORDERBYsys_id^"

@@ -21,7 +21,10 @@ TABLE_BATCH_SIZE = 5
 ROLE_FETCH_SIZE = 1000  # larger pages for sys_user_has_role keyset scan
 RETRIES = 3
 RETRY_INTERVAL = 2
-ORDER_BY_CREATION_DATE_QUERY = "ORDERBYsys_created_on^"
+# Pages are fetched with sysparm_offset, so the order must be total: records
+# created in the same second could otherwise come back in a different order
+# from one page request to the next. sys_id is unique and breaks those ties.
+ORDER_BY_CREATION_DATE_QUERY = "ORDERBYsys_created_on^ORDERBYsys_id^"
 ENDPOINTS = {
     "TABLE": "/api/now/table/{table}",
     "ATTACHMENT": "/api/now/attachment",
